@@ -3,12 +3,15 @@ name: actual
 description: >-
   Feature-complete companion for the actual CLI, an ADR-powered
   CLAUDE.md/AGENTS.md generator. Runs and troubleshoots actual adr-bot,
-  status, auth, config, runners, and models. Covers all 5 runners
+  status, auth, config, runners, and models, and drives the Actual
+  Advisor (login, advisor, whoami, logout) for org-scoped architecture
+  questions. Covers all 5 runners
   (claude-cli, anthropic-api, openai-api, codex-cli, cursor-cli),
   all model patterns, all 3 output formats (claude-md, agents-md,
   cursor-rules), and all error types. Use when working with the
   actual CLI, running actual adr-bot, configuring runners or models,
-  troubleshooting errors, or managing output files.
+  troubleshooting errors, managing output files, or asking the Advisor
+  what your team's ADRs say about a design choice.
 argument-hint: "[question or command] e.g. 'run sync', 'set up anthropic-api', 'fix ClaudeNotFound'"
 metadata:
   openclaw:
@@ -80,6 +83,12 @@ architectural decisions.
 | `actual config path` | Print config file path | (none) |
 | `actual runners` | List available runners | (none) |
 | `actual models` | List known models by runner | (none) |
+| `actual login` | Sign in to Actual AI (required for the Advisor) | `--no-browser`, `--org`, `--api-url` |
+| `actual advisor "<question>"` | Ask an org-scoped architecture question | `--repo`, `--org`, `--api-url` |
+| `actual whoami` | Show the signed-in identity (no network call) | (none) |
+| `actual logout` | Sign out and clear local credentials | (none) |
+
+> `login` / `advisor` / `whoami` / `logout` drive the **Actual Advisor** — a signed-in, org-scoped Q&A surface separate from the runner auth that `auth` reports. See [Asking the Advisor](#asking-the-advisor).
 
 ## Runner Decision Tree
 
@@ -210,6 +219,30 @@ bash .claude/skills/actual/scripts/diagnose.sh
 This checks all binaries, auth status, environment variables, config, and output files in one pass. It is read-only and never modifies anything.
 
 Use inline commands instead when checking a single thing (e.g., just `actual auth`).
+
+## Asking the Advisor
+
+Beyond generating guardrails, the actual CLI can answer architecture questions on demand. The `advisor` command queries your organization's ADRs and returns guidance grounded in your team's real decisions — reach for it when the user asks "what's our convention for X?" or "does our architecture allow Y?" instead of answering from general knowledge.
+
+The Advisor needs a signed-in Actual AI account, which is **separate from the runner auth** that `actual auth` reports. The flow is sign in, ask, then sign out when done:
+
+```bash
+# 1. Sign in via browser OAuth (grants the adr:query and adr:review scopes).
+actual login
+#    Headless or over SSH? Print the URL instead of opening a browser:
+actual login --no-browser
+
+# 2. Ask an org-scoped architecture question.
+actual advisor "Which router should new Next.js pages use?"
+
+# 3. Check identity, or sign out when finished.
+actual whoami
+actual logout
+```
+
+The Advisor prints the answer followed by the related ADRs it drew on, each with a confidence score. Scope a question to one connected repository with `--repo <UUID>` or to a specific organization with `--org`.
+
+Both `login` and `advisor` default to the **production** Actual AI endpoints out of the box (`https://app.actual.ai` for sign-in, the prod api-service for queries), so no URL flag is needed for normal use. Pass `--api-url`, or set `ACTUAL_AUTH_URL` / `ACTUAL_API_URL`, only to target staging or a local mock. `whoami` reads the local credentials and makes **no network call** (it errors when signed out); `logout` revokes the session server-side on a best-effort basis and then **always** clears the local credentials, even offline.
 
 ## Troubleshooting Quick Reference
 
